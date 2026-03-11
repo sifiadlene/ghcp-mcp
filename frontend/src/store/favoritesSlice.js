@@ -20,10 +20,14 @@ export const addFavorite = createAsyncThunk('favorites/addFavorite', async ({ to
 });
 
 export const removeFavorite = createAsyncThunk('favorites/removeFavorite', async ({ token, bookId }) => {
-  await fetch(`http://localhost:4000/api/favorites/${bookId}`, {
+  const res = await fetch(`http://localhost:4000/api/favorites/${bookId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: 'Failed to remove favorite' }));
+    throw new Error(error.message || 'Failed to remove favorite');
+  }
   return bookId;
 });
 

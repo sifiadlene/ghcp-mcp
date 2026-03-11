@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchFavorites, removeFavorite } from '../store/favoritesSlice';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +9,7 @@ const Favorites = () => {
   const status = useAppSelector(state => state.favorites.status);
   const token = useAppSelector(state => state.user.token);
   const navigate = useNavigate();
+  const [removeError, setRemoveError] = useState(null);
 
   useEffect(() => {
     if (!token) {
@@ -19,7 +20,11 @@ const Favorites = () => {
   }, [dispatch, token, navigate]);
 
   const handleRemoveFavorite = async (bookId) => {
-    await dispatch(removeFavorite({ token, bookId }));
+    setRemoveError(null);
+    const result = await dispatch(removeFavorite({ token, bookId }));
+    if (removeFavorite.rejected.match(result)) {
+      setRemoveError(result.error.message || 'Failed to remove favorite. Please try again.');
+    }
   };
 
   if (status === 'loading') return <div>Loading...</div>;
@@ -28,6 +33,7 @@ const Favorites = () => {
   return (
     <div>
       <h2>My Favorite Books</h2>
+      {removeError && <p style={{ color: 'red' }}>{removeError}</p>}
       {favorites.length === 0 ? (
         <div style={{
           background: '#fff',
