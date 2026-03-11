@@ -4,13 +4,34 @@ const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = 4000;
 const SECRET_KEY = 'your_jwt_secret';
 
+// generated-by-copilot: general rate limiter applied to all API routes
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later.' },
+});
+
+// generated-by-copilot: stricter rate limiter for auth endpoints to prevent brute-force attacks
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many authentication attempts, please try again later.' },
+});
+
 app.use(cors());
 app.use(bodyParser.json());
+// generated-by-copilot: general rate limiter for all API routes; auth routes additionally use authLimiter for stricter per-endpoint limiting
+app.use('/api', apiLimiter);
 
 
 const isTest = process.env.TEST_MODE === '1';
@@ -51,7 +72,8 @@ app.use('/api', createApiRouter({
   readJSON,
   writeJSON,
   authenticateToken,
-  SECRET_KEY
+  SECRET_KEY,
+  authLimiter,
 }));
 
 app.listen(PORT, () => {
