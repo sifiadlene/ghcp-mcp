@@ -50,6 +50,33 @@ describe('Favorites API', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
+  it('GET /api/favorites should return book objects with id, title, and author fields', async () => {
+    const token = getToken('sandra');
+    const res = await request(app)
+      .get('/api/favorites')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    res.body.forEach(book => {
+      expect(book).toHaveProperty('id');
+      expect(book).toHaveProperty('title');
+      expect(book).toHaveProperty('author');
+    });
+  });
+
+  it('GET /api/favorites should only return books that are in the user favorites list', async () => {
+    const token = getToken('sandra');
+    const users = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const sandra = users.find(u => u.username === 'sandra');
+    const res = await request(app)
+      .get('/api/favorites')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toBe(200);
+    res.body.forEach(book => {
+      expect(sandra.favorites).toContain(book.id);
+    });
+  });
+
   it('GET /api/favorites should 404 for non-existent user', async () => {
     const token = getToken('nouser');
     const res = await request(app)
@@ -74,17 +101,35 @@ describe('Favorites API', () => {
     expect(res.body.message).toMatch(/added/);
   });
 
+  it('POST /api/favorites should persist the new book to disk', async () => {
+    const token = getToken('sandra');
+    const books = JSON.parse(fs.readFileSync(booksFile, 'utf-8'));
+    const users = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const sandra = users.find(u => u.username === 'sandra');
+    const notFav = books.find(b => !sandra.favorites.includes(b.id));
+    if (!notFav) return;
+    await request(app)
+      .post('/api/favorites')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ bookId: notFav.id });
+    const updatedUsers = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const updatedSandra = updatedUsers.find(u => u.username === 'sandra');
+    expect(updatedSandra.favorites).toContain(notFav.id);
+  });
+
   it('POST /api/favorites should not duplicate favorites', async () => {
     const token = getToken('sandra');
     const users = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
     const sandra = users.find(u => u.username === 'sandra');
     const alreadyFav = sandra.favorites[0];
-    const res = await request(app)
+    const countBefore = sandra.favorites.length;
+    await request(app)
       .post('/api/favorites')
       .set('Authorization', `Bearer ${token}`)
       .send({ bookId: alreadyFav });
-    expect(res.statusCode).toBe(200);
-    expect(res.body.message).toMatch(/added/);
+    const updatedUsers = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const updatedSandra = updatedUsers.find(u => u.username === 'sandra');
+    expect(updatedSandra.favorites.length).toBe(countBefore);
   });
 
   it('POST /api/favorites should fail with missing bookId', async () => {
@@ -127,6 +172,36 @@ describe('Favorites API', () => {
     expect(updatedSandra.favorites).not.toContain(favBookId);
   });
 
+  it('DELETE /api/favorites/:bookId should decrease the favorites count by exactly 1', async () => {
+    const token = getToken('sandra');
+    const usersBefore = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const sandraBefore = usersBefore.find(u => u.username === 'sandra');
+    const countBefore = sandraBefore.favorites.length;
+    const favBookId = sandraBefore.favorites[0];
+    await request(app)
+      .delete(`/api/favorites/${favBookId}`)
+      .set('Authorization', `Bearer ${token}`);
+    const usersAfter = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const sandraAfter = usersAfter.find(u => u.username === 'sandra');
+    expect(sandraAfter.favorites.length).toBe(countBefore - 1);
+  });
+
+  it('DELETE /api/favorites/:bookId should not alter other favorites when removing one', async () => {
+    const token = getToken('sandra');
+    const users = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const sandra = users.find(u => u.username === 'sandra');
+    const favBookId = sandra.favorites[0];
+    const otherFavorites = sandra.favorites.slice(1);
+    await request(app)
+      .delete(`/api/favorites/${favBookId}`)
+      .set('Authorization', `Bearer ${token}`);
+    const updatedUsers = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const updatedSandra = updatedUsers.find(u => u.username === 'sandra');
+    otherFavorites.forEach(id => {
+      expect(updatedSandra.favorites).toContain(id);
+    });
+  });
+
   it('DELETE /api/favorites/:bookId should succeed even if book not in favorites', async () => {
     const token = getToken('sandra');
     const res = await request(app)
@@ -134,6 +209,19 @@ describe('Favorites API', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toMatch(/removed/);
+  });
+
+  it('DELETE /api/favorites/:bookId should not modify favorites for a non-matching bookId', async () => {
+    const token = getToken('sandra');
+    const usersBefore = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const sandraBefore = usersBefore.find(u => u.username === 'sandra');
+    const countBefore = sandraBefore.favorites.length;
+    await request(app)
+      .delete('/api/favorites/nonexistent-book-id')
+      .set('Authorization', `Bearer ${token}`);
+    const usersAfter = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
+    const sandraAfter = usersAfter.find(u => u.username === 'sandra');
+    expect(sandraAfter.favorites.length).toBe(countBefore);
   });
 
   it('DELETE /api/favorites/:bookId should 404 for non-existent user', async () => {
