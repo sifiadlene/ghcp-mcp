@@ -8,6 +8,7 @@
     "build:frontend": "cd frontend && npm run build",
     "test:frontend": "bash run-e2e.sh",
     "test:backend": "bash backend/tests/copy-test-data.sh && cd backend && npx jest",
+    "test:unit": "cd frontend && npm run test:unit",
     "test": "npm run test:frontend && npm run test:backend"
   },
   "keywords": [],
